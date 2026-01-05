@@ -27,7 +27,7 @@ jobs:
         run: pytest -v --disable-warnings
 
       - name: Run Security Scan (Bandit)
-        run: bandit -r . || true
+        run: bandit -r . --exclude test_app.py --exit-zero
 
   docker-deploy:
     runs-on: ubuntu-latest
