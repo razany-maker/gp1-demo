@@ -6,4 +6,3 @@ def test_addition_correct():
 # Optional: a deliberately failing test to demo CI catching failures
 # def test_addition_fail():
 #     assert add_numbers(2, 3) == 6
-#test
