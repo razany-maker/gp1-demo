@@ -1,16 +1,16 @@
-name: CI/CD Pipeline
+name: Web App Demo CI/CD
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: [ "master" ]
 
 jobs:
-  test:
+  build-test-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -18,62 +18,41 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
-          pip install flask pytest pytest-flask bandit
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip list
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # DEBUG STEP: List files to ensure we are in the right place
-      - name: Show Directory Structure
-        run: ls -R
+      - name: Run Unit Tests (Pytest)
+        run: pytest -v --disable-warnings
 
-      - name: Run Tests
-        # FIXED: Add PYTHONPATH so pytest can find your app modules
-        env:
-          PYTHONPATH: .
-        # FIXED: This allows the pipeline to finish even if tests fail,
-        # so you can read the logs.
-        continue-on-error: true
-        run: pytest -v
+      - name: Run Security Scan (Bandit)
+        run: bandit -r .
 
-      - name: Security Scan
-        run: bandit -r . || true
-
-  build-and-push:
-    needs: test
+  docker-deploy:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: build-test-scan
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # FIXED: Check if secrets exist before trying to log in.
-      # This prevents "Error: Username and password required" if you haven't set secrets yet.
-      - name: Check for Docker Secrets
-        id: check-secrets
-        env:
-          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          if [ -z "$DOCKER_USER" ] || [ -z "$DOCKER_TOKEN" ]; then
-            echo "Secrets not found. Skipping Docker build."
-            echo "has_secrets=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_secrets=true" >> $GITHUB_OUTPUT
-          fi
-
       - name: Log in to Docker Hub
-        if: steps.check-secrets.outputs.has_secrets == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
-        if: steps.check-secrets.outputs.has_secrets == 'true'
-        uses: docker/build-push-action@v5
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/gp1-demo:latest .
+
+      - name: Push Docker image to Docker Hub
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/gp1-demo:latest
+
+      - name: Save Docker image locally
+        run: docker save ${{ secrets.DOCKERHUB_USERNAME }}/gp1-demo:latest -o gp1-demo.tar
+
+      - name: Upload Docker image as artifact
+        uses: actions/upload-artifact@v4
         with:
-          context: .
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gp1-demo:latest
+          name: gp1-demo-image
+          path: gp1-demo.tar
