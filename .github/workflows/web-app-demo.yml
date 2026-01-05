@@ -48,13 +48,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # FIXED: Check if secrets exist before trying to log in.
+      # This prevents "Error: Username and password required" if you haven't set secrets yet.
+      - name: Check for Docker Secrets
+        id: check-secrets
+        env:
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_USER" ] || [ -z "$DOCKER_TOKEN" ]; then
+            echo "Secrets not found. Skipping Docker build."
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_secrets=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Log in to Docker Hub
+        if: steps.check-secrets.outputs.has_secrets == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and Push Docker Image
+        if: steps.check-secrets.outputs.has_secrets == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
